@@ -90,6 +90,19 @@ canvas#waveform {
   gap: 0.375rem;
 }
 
+.export-section {
+  margin-top: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.export-section .hint {
+  width: 100%;
+  margin-top: 0;
+}
+
 .band-list li {
   display: flex;
   align-items: center;

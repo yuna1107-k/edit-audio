@@ -6,6 +6,9 @@ import { AudioPlayer } from "./phase1-upload-playback/audioPlayer";
 import type { FrequencyBand } from "./phase2-frequency-cut/notchFilterParams";
 import { clampPlaybackRate } from "./phase3-speed-control/speedRange";
 import { clampPitchSemitones } from "./phase4-pitch-control/pitchRange";
+import { buildExportFileName } from "./phase5-export/exportFileName";
+import { downloadBlob } from "./phase5-export/downloadBlob";
+import { encodeWav } from "./phase5-export/wavEncoder";
 import { renderAudio, type PitchMode } from "./shared/renderPipeline";
 import type { LoadedAudio } from "./shared/types";
 
@@ -56,7 +59,11 @@ if (app) {
         <ul id="band-list" class="band-list"></ul>
       </section>
 
-      <button id="preview-button" type="button" disabled>加工後をプレビュー再生</button>
+      <section class="export-section">
+        <button id="preview-button" type="button" disabled>加工後をプレビュー再生</button>
+        <button id="export-button" type="button" disabled>加工後をWAVで書き出す</button>
+        <p id="export-status" class="hint"></p>
+      </section>
     </main>
   `;
 
@@ -81,6 +88,8 @@ if (app) {
   const bandError = document.querySelector<HTMLParagraphElement>("#band-error")!;
   const bandList = document.querySelector<HTMLUListElement>("#band-list")!;
   const previewButton = document.querySelector<HTMLButtonElement>("#preview-button")!;
+  const exportButton = document.querySelector<HTMLButtonElement>("#export-button")!;
+  const exportStatus = document.querySelector<HTMLParagraphElement>("#export-status")!;
 
   const audioContext = new AudioContext();
   const player = new AudioPlayer(audioContext);
@@ -89,11 +98,19 @@ if (app) {
   let playbackRate = 1;
   let pitchSemitones = 0;
   let pitchMode: PitchMode = "linked";
+  let isProcessing = false;
 
   const setPlayingState = (isPlaying: boolean) => {
     playButton.disabled = isPlaying || !loaded;
     stopButton.disabled = !isPlaying;
-    previewButton.disabled = isPlaying || !loaded;
+    previewButton.disabled = isPlaying || isProcessing || !loaded;
+    exportButton.disabled = isPlaying || isProcessing || !loaded;
+  };
+
+  const setProcessing = (processing: boolean) => {
+    isProcessing = processing;
+    previewButton.disabled = processing || !loaded;
+    exportButton.disabled = processing || !loaded;
   };
 
   const renderBandList = () => {
@@ -105,6 +122,17 @@ if (app) {
       .join("");
   };
 
+  const renderCurrentAudio = () => {
+    if (!loaded) throw new Error("no audio loaded");
+    return renderAudio(loaded.buffer, audioContext, {
+      pitchMode,
+      playbackRate,
+      tempo: playbackRate,
+      pitchSemitones,
+      bands,
+    });
+  };
+
   setupUploadArea(dropZone, fileInput, async (file) => {
     fileInfo.textContent = `読み込み中: ${file.name}`;
     try {
@@ -114,6 +142,7 @@ if (app) {
         `${loaded.fileName} (${duration.toFixed(2)}秒 / ` +
         `${sampleRate}Hz / ${numberOfChannels}ch)`;
       drawWaveform(canvas, loaded.buffer);
+      exportStatus.textContent = "";
       setPlayingState(false);
     } catch {
       fileInfo.textContent = `${file.name} を音声として読み込めませんでした`;
@@ -176,19 +205,32 @@ if (app) {
 
   previewButton.addEventListener("click", async () => {
     if (!loaded) return;
-    setPlayingState(true);
+    setProcessing(true);
     try {
-      const rendered = await renderAudio(loaded.buffer, audioContext, {
-        pitchMode,
-        playbackRate,
-        tempo: playbackRate,
-        pitchSemitones,
-        bands,
-      });
+      const rendered = await renderCurrentAudio();
+      setPlayingState(true);
       player.play(rendered, () => setPlayingState(false));
     } catch {
       bandError.textContent = "プレビューの生成に失敗しました";
-      setPlayingState(false);
+    } finally {
+      setProcessing(false);
+    }
+  });
+
+  exportButton.addEventListener("click", async () => {
+    if (!loaded) return;
+    setProcessing(true);
+    exportStatus.textContent = "書き出し中...";
+    try {
+      const rendered = await renderCurrentAudio();
+      const wavData = encodeWav(rendered);
+      const fileName = buildExportFileName(loaded.fileName);
+      downloadBlob(wavData, fileName, "audio/wav");
+      exportStatus.textContent = `${fileName} をダウンロードしました`;
+    } catch {
+      exportStatus.textContent = "書き出しに失敗しました";
+    } finally {
+      setProcessing(false);
     }
   });
 }
