@@ -3,6 +3,10 @@
   font-family: system-ui, sans-serif;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 body {
   max-width: 640px;
   margin: 2rem auto;
@@ -52,6 +56,11 @@ canvas#waveform {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.speed-section .mode-toggle {
+  font-size: 0.875rem;
 }
 
 .hint {

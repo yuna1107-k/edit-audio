@@ -5,7 +5,8 @@ import { setupUploadArea } from "./phase1-upload-playback/uploadArea";
 import { AudioPlayer } from "./phase1-upload-playback/audioPlayer";
 import type { FrequencyBand } from "./phase2-frequency-cut/notchFilterParams";
 import { clampPlaybackRate } from "./phase3-speed-control/speedRange";
-import { renderAudio } from "./shared/renderPipeline";
+import { clampPitchSemitones } from "./phase4-pitch-control/pitchRange";
+import { renderAudio, type PitchMode } from "./shared/renderPipeline";
 import type { LoadedAudio } from "./shared/types";
 
 const app = document.querySelector<HTMLDivElement>("#app");
@@ -26,12 +27,22 @@ if (app) {
       </div>
 
       <section class="speed-section">
-        <h2>再生スピード</h2>
+        <h2>再生スピード / ピッチ</h2>
+        <label class="mode-toggle">
+          <input id="pitch-mode-toggle" type="checkbox" />
+          ピッチを速度と独立して変更する
+        </label>
         <label>
+          速度
           <input id="speed-slider" type="range" min="0.5" max="2" step="0.05" value="1" />
           <span id="speed-value">1.00x</span>
         </label>
-        <p class="hint">速度に連動してピッチも変化します(テープ早回しモード)</p>
+        <label id="pitch-control" class="pitch-control" hidden>
+          ピッチ(半音)
+          <input id="pitch-slider" type="range" min="-12" max="12" step="1" value="0" />
+          <span id="pitch-value">0</span>
+        </label>
+        <p class="hint" id="speed-hint">速度に連動してピッチも変化します(テープ早回しモード)</p>
       </section>
 
       <section class="band-section">
@@ -56,8 +67,13 @@ if (app) {
   const playButton = document.querySelector<HTMLButtonElement>("#play-button")!;
   const stopButton = document.querySelector<HTMLButtonElement>("#stop-button")!;
 
+  const pitchModeToggle = document.querySelector<HTMLInputElement>("#pitch-mode-toggle")!;
   const speedSlider = document.querySelector<HTMLInputElement>("#speed-slider")!;
   const speedValue = document.querySelector<HTMLSpanElement>("#speed-value")!;
+  const pitchControl = document.querySelector<HTMLLabelElement>("#pitch-control")!;
+  const pitchSlider = document.querySelector<HTMLInputElement>("#pitch-slider")!;
+  const pitchValue = document.querySelector<HTMLSpanElement>("#pitch-value")!;
+  const speedHint = document.querySelector<HTMLParagraphElement>("#speed-hint")!;
 
   const bandLowInput = document.querySelector<HTMLInputElement>("#band-low")!;
   const bandHighInput = document.querySelector<HTMLInputElement>("#band-high")!;
@@ -71,6 +87,8 @@ if (app) {
   let loaded: LoadedAudio | null = null;
   let bands: FrequencyBand[] = [];
   let playbackRate = 1;
+  let pitchSemitones = 0;
+  let pitchMode: PitchMode = "linked";
 
   const setPlayingState = (isPlaying: boolean) => {
     playButton.disabled = isPlaying || !loaded;
@@ -115,9 +133,22 @@ if (app) {
     setPlayingState(false);
   });
 
+  pitchModeToggle.addEventListener("change", () => {
+    pitchMode = pitchModeToggle.checked ? "independent" : "linked";
+    pitchControl.hidden = !pitchModeToggle.checked;
+    speedHint.textContent = pitchModeToggle.checked
+      ? "速度とピッチをそれぞれ独立して変更します"
+      : "速度に連動してピッチも変化します(テープ早回しモード)";
+  });
+
   speedSlider.addEventListener("input", () => {
     playbackRate = clampPlaybackRate(Number(speedSlider.value));
     speedValue.textContent = `${playbackRate.toFixed(2)}x`;
+  });
+
+  pitchSlider.addEventListener("input", () => {
+    pitchSemitones = clampPitchSemitones(Number(pitchSlider.value));
+    pitchValue.textContent = `${pitchSemitones}`;
   });
 
   addBandButton.addEventListener("click", () => {
@@ -147,7 +178,13 @@ if (app) {
     if (!loaded) return;
     setPlayingState(true);
     try {
-      const rendered = await renderAudio(loaded.buffer, { playbackRate, bands });
+      const rendered = await renderAudio(loaded.buffer, audioContext, {
+        pitchMode,
+        playbackRate,
+        tempo: playbackRate,
+        pitchSemitones,
+        bands,
+      });
       player.play(rendered, () => setPlayingState(false));
     } catch {
       bandError.textContent = "プレビューの生成に失敗しました";
