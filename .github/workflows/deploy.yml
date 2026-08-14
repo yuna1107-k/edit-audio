@@ -2,7 +2,7 @@ name: Deploy
 
 on:
   push:
-    branches: [feat/plan]
+    branches: [main]
 
 jobs:
   deploy:
