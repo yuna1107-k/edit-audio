@@ -5,3 +5,5 @@ node_modules/
 *.log
 .DS_Store
 worker-configuration.d.ts
+playwright-report/
+test-results/
