@@ -1,0 +1,27 @@
+name: Deploy
+
+on:
+  push:
+    branches: [feat/plan]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      # CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID をリポジトリのSecretsに
+      # 設定した場合のみ実行する(未設定の場合はスキップされ、失敗にはしない)。
+      # Cloudflare Workers Builds(Git連携)で既に自動デプロイされている場合は
+      # このステップは不要。
+      - name: Deploy to Cloudflare Workers
+        if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+        run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

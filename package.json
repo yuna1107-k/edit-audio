@@ -7,9 +7,11 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "wrangler dev",
+    "preview:vite": "vite preview --port 4173",
     "deploy": "npm run build && wrangler deploy",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.worker.json",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "lint": "eslint ."
   },
   "dependencies": {
@@ -18,6 +20,8 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260814.1",
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^26.2.0",
     "eslint": "^10.8.1",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.67.0",
