@@ -3,8 +3,9 @@ import { decodeAudioFile } from "./phase1-upload-playback/decodeAudioFile";
 import { drawWaveform } from "./phase1-upload-playback/drawWaveform";
 import { setupUploadArea } from "./phase1-upload-playback/uploadArea";
 import { AudioPlayer } from "./phase1-upload-playback/audioPlayer";
-import { renderWithBandCuts } from "./phase2-frequency-cut/offlineRender";
 import type { FrequencyBand } from "./phase2-frequency-cut/notchFilterParams";
+import { clampPlaybackRate } from "./phase3-speed-control/speedRange";
+import { renderAudio } from "./shared/renderPipeline";
 import type { LoadedAudio } from "./shared/types";
 
 const app = document.querySelector<HTMLDivElement>("#app");
@@ -24,6 +25,15 @@ if (app) {
         <button id="stop-button" type="button" disabled>停止</button>
       </div>
 
+      <section class="speed-section">
+        <h2>再生スピード</h2>
+        <label>
+          <input id="speed-slider" type="range" min="0.5" max="2" step="0.05" value="1" />
+          <span id="speed-value">1.00x</span>
+        </label>
+        <p class="hint">速度に連動してピッチも変化します(テープ早回しモード)</p>
+      </section>
+
       <section class="band-section">
         <h2>カットする周波数帯域</h2>
         <div class="band-inputs">
@@ -33,8 +43,9 @@ if (app) {
         </div>
         <p id="band-error" class="band-error"></p>
         <ul id="band-list" class="band-list"></ul>
-        <button id="preview-button" type="button" disabled>加工後をプレビュー再生</button>
       </section>
+
+      <button id="preview-button" type="button" disabled>加工後をプレビュー再生</button>
     </main>
   `;
 
@@ -44,6 +55,9 @@ if (app) {
   const canvas = document.querySelector<HTMLCanvasElement>("#waveform")!;
   const playButton = document.querySelector<HTMLButtonElement>("#play-button")!;
   const stopButton = document.querySelector<HTMLButtonElement>("#stop-button")!;
+
+  const speedSlider = document.querySelector<HTMLInputElement>("#speed-slider")!;
+  const speedValue = document.querySelector<HTMLSpanElement>("#speed-value")!;
 
   const bandLowInput = document.querySelector<HTMLInputElement>("#band-low")!;
   const bandHighInput = document.querySelector<HTMLInputElement>("#band-high")!;
@@ -56,6 +70,7 @@ if (app) {
   const player = new AudioPlayer(audioContext);
   let loaded: LoadedAudio | null = null;
   let bands: FrequencyBand[] = [];
+  let playbackRate = 1;
 
   const setPlayingState = (isPlaying: boolean) => {
     playButton.disabled = isPlaying || !loaded;
@@ -100,6 +115,11 @@ if (app) {
     setPlayingState(false);
   });
 
+  speedSlider.addEventListener("input", () => {
+    playbackRate = clampPlaybackRate(Number(speedSlider.value));
+    speedValue.textContent = `${playbackRate.toFixed(2)}x`;
+  });
+
   addBandButton.addEventListener("click", () => {
     const low = Number(bandLowInput.value);
     const high = Number(bandHighInput.value);
@@ -127,7 +147,7 @@ if (app) {
     if (!loaded) return;
     setPlayingState(true);
     try {
-      const rendered = await renderWithBandCuts(loaded.buffer, bands);
+      const rendered = await renderAudio(loaded.buffer, { playbackRate, bands });
       player.play(rendered, () => setPlayingState(false));
     } catch {
       bandError.textContent = "プレビューの生成に失敗しました";
